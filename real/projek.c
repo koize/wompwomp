@@ -142,8 +142,7 @@ static void printTicket(void){
 	sprintf(LCDStr,"beep beep");
 	LCDprint(LCDStr);
 	usleep(100000);
-
-	
+	openGantry();
 }
 
 
@@ -158,6 +157,13 @@ static void openGantry(void){
 	moveMotor(1);
 	usleep(500000);
 	moveMotor(0);
+	lcd_writecmd(0x01);  //clear screen
+	lcd_writecmd(0x80);
+	sprintf(LCDStr,"Have A");
+	LCDprint(LCDStr);
+	lcd_writecmd(0xC0);
+	sprintf(LCDStr,"Nice Day");
+	LCDprint(LCDStr);
 }
 
 
