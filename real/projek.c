@@ -9,7 +9,13 @@
 
 #define LEDPort 0x3A		/* LED port */
 #define LCDPort 0x3B			/* LCD port */
+#define SMPort 0x39 	    // stepper motor port
 #define KbdPort 0x34			/* Keypad port */
+
+#define	NumSteps	200
+#define	PtableLen	4
+
+unsigned char Ptable []={0x01, 0x02, 0x4, 0x08};
 
 
 unsigned char ProcKey();
@@ -56,10 +62,16 @@ int main(int argc, char *argv[])
 	
 	initlcd();
 	sleep(1);
+
+	/*
 	lcd_writecmd(0x80);
 	LCDprint("LCD Lab");
 	lcd_writecmd(0xC0);
 	LCDprint("12345678");
+	test=104;
+	sprintf(LCDStr,"Subject:ET%d-OK",test);
+	LCDprint(LCDStr);
+	*/
 
 	while(1)
 	{
@@ -73,6 +85,26 @@ int main(int argc, char *argv[])
 				ii = i - 0x30;
 			}
 
+			if (i == 0x79) { //press 1 to simulate car detected
+				//simulate car detected
+				lcd_writecmd(0x01);  //clear screen
+				lcd_writecmd(0x80);
+				sprintf(LCDStr,"Car Detected");
+				LCDprint(LCDStr);
+				usleep(100000);
+				lcd_writecmd(0x01);  //clear screen
+				sprintf(LCDStr,"Press # for");
+				LCDprint(LCDStr);
+				lcd_writecmd(0xC0);
+				sprintf(LCDStr,"Ticket");
+				LCDprint(LCDStr);
+
+				if (i == 0xD7) { //press # to print ticket
+					printTicket();
+				}
+
+			}
+
 			lcddata(i);                                 // output to LCD
 			CM3_outport(LEDPort, Bin2LED[ii]);			// output to LED
 			usleep(300000);
@@ -82,6 +114,74 @@ int main(int argc, char *argv[])
 	CM3DeviceDeInit();   
 
 }  
+
+static void printTicket(void){
+	// Get the current time
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[9]; // Buffer to hold the formatted time string "hh:mm:ss"
+
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+
+    // Format the time as "hh:mm:ss"
+    strftime(buffer, sizeof(buffer), "%H:%M:%S", timeinfo);
+
+    // Clear the LCD screen
+    lcd_writecmd(0x01);
+
+    // Display the formatted time on the LCD
+	LCDprint(buffer);
+
+    // Show "8" on the 7-segment LED
+    CM3_outport(LEDPort, Bin2LED[8]);
+
+	//beep beep
+	lcd_writecmd(0x01);  //clear screen
+	lcd_writecmd(0x80);
+	sprintf(LCDStr,"beep beep");
+	LCDprint(LCDStr);
+	usleep(100000);
+
+	
+}
+
+
+
+
+static void openGantry(void){
+	//open gantry
+	lcd_writecmd(0x01);  //clear screen
+	lcd_writecmd(0x80);
+	sprintf(LCDStr,"Gantry Opened");
+	LCDprint(LCDStr);
+	moveMotor(1);
+	usleep(500000);
+	moveMotor(0);
+}
+
+
+static void moveMotor(int direction) {
+	i=0;
+	if (direction == 1) { //normal
+		for (j=NumSteps;j>0;j--)
+		{
+			CM3_outport(SMPort, Ptable[i]);	/* output to stepper motor */
+			usleep(10000);                  /* delay */
+			i++;
+			if (i>=PtableLen) i=0;
+		}
+	} else { //reverse
+		for (j=NumSteps;j>0;j--)
+		{
+			CM3_outport(SMPort, Ptable[i]);	/* output to stepper motor */
+			usleep(10000);                  /* delay */
+			i--;
+			if (i<0) i=PtableLen-1;
+		}
+	}
+	
+}
 
 static void initlcd(void)                               // function to initialise LCD
 {

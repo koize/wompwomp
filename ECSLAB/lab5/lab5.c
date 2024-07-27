@@ -7,10 +7,10 @@
 #include "library.h"
 
 #define SMPort 		0x31									// stepper motor port
-#define	NumSteps	200
+#define	NumSteps	100
 #define	PtableLen	4
 
-unsigned char Ptable []={0x__,0x__,0x__,0x__};
+unsigned char Ptable []={0x01, 0x02, 0x4, 0x08};
 
 /********** MAIN PROGRAM *************/
 
