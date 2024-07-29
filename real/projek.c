@@ -76,6 +76,8 @@ int main(int argc, char *argv[])
 	while(1)
 	{
 		unsigned char i,ii;
+		system("killall pqiv");												// close previous instances of PQIV if any
+		system("DISPLAY=:0.0 pqiv -f /tmp/welcome.jpg &");       			// on main display, launch PQIV, fulscreen, image path in linux, continue program
 		i = ScanKey();
 		if (i != 0xFF)									// if key is pressed
 		{
