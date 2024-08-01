@@ -5,12 +5,13 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "library.h"
 
 #define LEDPort 0x3A		/* LED port */
 #define LCDPort 0x3B			/* LCD port */
 #define SMPort 0x39 	    // stepper motor port
-#define KbdPort 0x34			/* Keypad port */
+#define KbdPort 0x3C			/* Keypad port */
 
 #define	NumSteps	200
 #define	PtableLen	4
@@ -53,6 +54,9 @@ static void initlcd();
 static void lcd_writecmd(char cmd);
 static void LCDprint(char *sptr);
 static void lcddata(unsigned char cmd);
+static void printTicket();
+static void openGantry();
+static void moveMotor(int direction);
 
 /************* MAIN PROGRAM ******************/
 
@@ -76,8 +80,9 @@ int main(int argc, char *argv[])
 	while(1)
 	{
 		unsigned char i,ii;
-		system("killall pqiv");												// close previous instances of PQIV if any
-		system("DISPLAY=:0.0 pqiv -f /tmp/welcome.jpg &");       			// on main display, launch PQIV, fulscreen, image path in linux, continue program
+		unsigned char key;
+		//system("killall pqiv");												// close previous instances of PQIV if any
+		//system("DISPLAY=:0.0 pqiv -f /tmp/welcome.jpg &");       			// on main display, launch PQIV, fulscreen, image path in linux, continue program
 		i = ScanKey();
 		if (i != 0xFF)									// if key is pressed
 		{
@@ -87,34 +92,47 @@ int main(int argc, char *argv[])
 				ii = i - 0x30;
 			}
 
-			if (i == 0x79) { //press 1 to simulate car detected
+			if (ii == 1) { //press 1 to simulate car detected
 				//simulate car detected
 				lcd_writecmd(0x01);  //clear screen
 				lcd_writecmd(0x80);
-				sprintf(LCDStr,"Car Detected");
-				LCDprint(LCDStr);
-				usleep(100000);
+				//sprintf(LCDStr,"Car Detected");
+				LCDprint("Car Detected");
+				usleep(2000000);
 				lcd_writecmd(0x01);  //clear screen
-				sprintf(LCDStr,"Press # for");
-				LCDprint(LCDStr);
+				//sprintf(LCDStr,"Press # for");
+				LCDprint("Press # for");
 				lcd_writecmd(0xC0);
-				sprintf(LCDStr,"Ticket");
-				LCDprint(LCDStr);
+				//sprintf(LCDStr,"Ticket");
+				LCDprint("Ticket");
+				//i = 0xFF;
+				
+				
+								
 
-				if (i == 0xD7) { //press # to print ticket
-					printTicket();
+				while (key != 'B'){
+					if (i != 0xFF)													// if key is pressed
+					{
+						key = ScanKey();											// store last key pressed
+					}	
+					if (key == 'B'){
+						printTicket();
+						break;
+					}
 				}
+				
+				
+				
 
 			}
 
-			lcddata(i);                                 // output to LCD
+			//lcddata(i);                                 // output to LCD
 			CM3_outport(LEDPort, Bin2LED[ii]);			// output to LED
-			usleep(300000);
+			usleep(3000000); //sleep for 3 seconds
 		}
 	}
 
-	CM3DeviceDeInit();   
-
+	CM3DeviceDeInit();
 }  
 
 static void printTicket(void){
@@ -141,9 +159,9 @@ static void printTicket(void){
 	//beep beep
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	sprintf(LCDStr,"beep beep");
-	LCDprint(LCDStr);
-	usleep(100000);
+	//sprintf(LCDStr,"beep beep");
+	LCDprint("beep beep");
+	usleep(3000000);
 	openGantry();
 }
 
@@ -154,22 +172,23 @@ static void openGantry(void){
 	//open gantry
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	sprintf(LCDStr,"Gantry Opened");
-	LCDprint(LCDStr);
+	//sprintf(LCDStr,"Gantry Opened");
+	LCDprint("Gantry Opened");
 	moveMotor(1);
-	usleep(500000);
+	usleep(5000000);
 	moveMotor(0);
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	sprintf(LCDStr,"Have A");
-	LCDprint(LCDStr);
+	//sprintf(LCDStr,"Have A");
+	LCDprint("Have A");
 	lcd_writecmd(0xC0);
-	sprintf(LCDStr,"Nice Day");
-	LCDprint(LCDStr);
+	//sprintf(LCDStr,"Nice Day");
+	LCDprint("Nice Day");
 }
 
 
 static void moveMotor(int direction) {
+	int i,j;
 	i=0;
 	if (direction == 1) { //normal
 		for (j=NumSteps;j>0;j--)
