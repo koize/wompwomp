@@ -8,6 +8,7 @@
 #include <time.h>
 #include "library.h"
 
+
 #define LEDPort 0x3A		/* LED port */
 #define LCDPort 0x3B			/* LCD port */
 #define SMPort 0x39 	    // stepper motor port
@@ -15,6 +16,7 @@
 
 #define	NumSteps	200
 #define	PtableLen	4
+#define AUDIOFILE "/tmp/shootingstars.raw"
 
 unsigned char Ptable []={0x01, 0x02, 0x4, 0x08};
 
@@ -50,6 +52,7 @@ unsigned char ScanCode;			// hold scan code returned
 #define Col5Lo 0xFD            // column 5 scan
 #define Col4Lo 0xFE            // column 4 scan
 
+static void displaycurrentime();
 static void initlcd();
 static void lcd_writecmd(char cmd);
 static void LCDprint(char *sptr);
@@ -57,6 +60,7 @@ static void lcddata(unsigned char cmd);
 static void printTicket();
 static void openGantry();
 static void moveMotor(int direction);
+static void runDAC();
 
 /************* MAIN PROGRAM ******************/
 
@@ -81,9 +85,12 @@ int main(int argc, char *argv[])
 	{
 		unsigned char i,ii;
 		unsigned char key;
-		//system("killall pqiv");												// close previous instances of PQIV if any
-		//system("DISPLAY=:0.0 pqiv -f /tmp/welcome.jpg &");       			// on main display, launch PQIV, fulscreen, image path in linux, continue program
+		system("killall pqiv");												// close previous instances of PQIV if any
+		usleep(100000); //sleep for 3 seconds
+		system("DISPLAY=:0.0 pqiv -f /tmp/welcomeui.jpg &");       			// on main display, launch PQIV, fulscreen, image path in linux, continue program
+		displaycurrentime();
 		i = ScanKey();
+		
 		if (i != 0xFF)									// if key is pressed
 		{
 			if (i > 0x39) {                             // if numerals pressed output numbers, if * or # pressed output A and B
@@ -99,6 +106,8 @@ int main(int argc, char *argv[])
 				//sprintf(LCDStr,"Car Detected");
 				LCDprint("Car Detected");
 				usleep(2000000);
+				system("killall pqiv");
+	            system("DISPLAY=:0.0 pqiv -f /tmp/printingui.jpg &");
 				lcd_writecmd(0x01);  //clear screen
 				//sprintf(LCDStr,"Press # for");
 				LCDprint("Press # for");
@@ -126,6 +135,7 @@ int main(int argc, char *argv[])
 
 			}
 
+
 			//lcddata(i);                                 // output to LCD
 			CM3_outport(LEDPort, Bin2LED[ii]);			// output to LED
 			usleep(3000000); //sleep for 3 seconds
@@ -136,6 +146,7 @@ int main(int argc, char *argv[])
 }  
 
 static void printTicket(void){
+
 	// Get the current time
     time_t rawtime;
     struct tm * timeinfo;
@@ -157,13 +168,27 @@ static void printTicket(void){
     CM3_outport(LEDPort, Bin2LED[8]);
 
 	//beep beep
-	lcd_writecmd(0x01);  //clear screen
-	lcd_writecmd(0x80);
+	lcd_writecmd(0xC0);
 	//sprintf(LCDStr,"beep beep");
 	LCDprint("beep beep");
+	 runDAC();
 	usleep(3000000);
 	openGantry();
 }
+static void displaycurrentime(void){
+	lcd_writecmd(0x01);  //clear screen
+	lcd_writecmd(0x80);
+	time_t now;
+	struct tm*tm_info;
+	char timestring[16];
+	time(&now);
+	tm_info = localtime(&now);
+	strftime(timestring,sizeof(timestring),"%H:%M:%S",tm_info);
+	//sprintf(LCDStr,"Car Detected");
+	LCDprint(timestring);
+	usleep(200000);
+}
+
 
 
 
@@ -176,7 +201,13 @@ static void openGantry(void){
 	LCDprint("Gantry Opened");
 	moveMotor(1);
 	usleep(5000000);
+	lcd_writecmd(0x01);  //clear screen
+	lcd_writecmd(0x80);
+	//sprintf(LCDStr,"Gantry Opened");
+	LCDprint("Gantry Closing");
 	moveMotor(0);
+	system("killall pqiv");
+	system("DISPLAY=:0.0 pqiv -f /tmp/printingui.jpg &");
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
 	//sprintf(LCDStr,"Have A");
@@ -338,4 +369,43 @@ unsigned char ProcKey()
 	}
 
 	return (0);
+}
+void runDAC(void) {
+    unsigned char buffer[1];
+    FILE *ptr;
+
+    // Open the audio file for reading
+    ptr = fopen(AUDIOFILE, "rb");
+    if (ptr == NULL) {
+        perror(AUDIOFILE);
+        printf("File cannot be found\n");
+        return;
+    }
+
+    // Initialize DAC
+    CM3DeviceInit();
+    CM3PortInit(5);  // Initialise DAC
+    printf("Connect Pin 1 and 2 of selection jumper Connector J3\n");
+
+    // Track the start time
+    clock_t start_time = clock();
+    clock_t current_time;
+    double elapsed_time;
+
+    // Read from the file and write to the DAC
+    while (fread(buffer, sizeof(buffer), 1, ptr) == 1) {
+        // Check elapsed time
+        current_time = clock();
+        elapsed_time = (double)(current_time - start_time) / CLOCKS_PER_SEC;
+        if (elapsed_time > 5.0) {  // 5 seconds limit
+            printf("DAC operation limited to 5 seconds.\n");
+            break;
+        }
+
+        CM3PortWrite(3, buffer[0]);
+        usleep(100);  // Adjust sleep time as needed
+    }
+
+    // Close the file
+    fclose(ptr);
 }
