@@ -53,12 +53,17 @@ unsigned char ScanCode;			// hold scan code returned
 #define Col4Lo 0xFE            // column 4 scan
 
 static void displaycurrentime();
+static void openGantry();
+static void printTicket();
+static int guichange(int selectant);
+
+
+
+
 static void initlcd();
 static void lcd_writecmd(char cmd);
 static void LCDprint(char *sptr);
 static void lcddata(unsigned char cmd);
-static void printTicket();
-static void openGantry();
 static void moveMotor(int direction);
 static void runDAC();
 
@@ -67,28 +72,26 @@ static void runDAC();
 int main(int argc, char *argv[])
 {
 	CM3DeviceInit();
+	CM3PortInit(5);  // Initialise DAC
 	
 	initlcd();
 	sleep(1);
 
-	/*
-	lcd_writecmd(0x80);
-	LCDprint("LCD Lab");
-	lcd_writecmd(0xC0);
-	LCDprint("12345678");
-	test=104;
-	sprintf(LCDStr,"Subject:ET%d-OK",test);
-	LCDprint(LCDStr);
-	*/
 
 	while(1)
 	{
 		unsigned char i,ii;
 		unsigned char key;
-		system("killall pqiv");												// close previous instances of PQIV if any
-		usleep(100000); //sleep for 3 seconds
-		system("DISPLAY=:0.0 pqiv -f /tmp/welcomeui.jpg &");       			// on main display, launch PQIV, fulscreen, image path in linux, continue program
+		static int car_status,gui_status,gui_initial_status=0;
+
+		time_t entryTime, exitTime;
+
+		if(gui_initial_status==0){             //prevents constant spamming of gui change
+			gui_initial_status=guichange(1);
+		}
+
 		displaycurrentime();
+
 		i = ScanKey();
 		
 		if (i != 0xFF)									// if key is pressed
@@ -100,42 +103,42 @@ int main(int argc, char *argv[])
 			}
 
 			if (ii == 1) { //press 1 to simulate car detected
-				//simulate car detected
+
 				lcd_writecmd(0x01);  //clear screen
 				lcd_writecmd(0x80);
-				//sprintf(LCDStr,"Car Detected");
 				LCDprint("Car Detected");
 				usleep(2000000);
-				system("killall pqiv");
-	            system("DISPLAY=:0.0 pqiv -f /tmp/printingui.jpg &");
-				lcd_writecmd(0x01);  //clear screen
-				//sprintf(LCDStr,"Press # for");
-				LCDprint("Press # for");
-				lcd_writecmd(0xC0);
-				//sprintf(LCDStr,"Ticket");
-				LCDprint("Ticket");
-				//i = 0xFF;
-				
-				
-								
 
-				while (key != 'B'){
+				guichange(2);
+
+				if(car_status==0){ //if no car inside carpark, enter this into carlist
+				    openGantry();
+					car_status=1;
+					 time(&entryTime);
+				}else if(car_status==1){ //if car is inside carpark, print ticket
+					lcd_writecmd(0x01);  
+				    LCDprint("Press # for");
+				    lcd_writecmd(0xC0);
+				    LCDprint("Ticket");
+
+					while (key != 'B'){
 					if (i != 0xFF)													// if key is pressed
 					{
 						key = ScanKey();											// store last key pressed
 					}	
 					if (key == 'B'){
-						printTicket();
+						time(&exitTime);
+						double paymentamount = (difftime(entryTime, exitTime))/60*0.02;
+						printTicket(paymentamount);
 						break;
 					}
 				}
-				
-				
-				
+				}
+
 
 			}
 
-
+            //what is this for?
 			//lcddata(i);                                 // output to LCD
 			CM3_outport(LEDPort, Bin2LED[ii]);			// output to LED
 			usleep(3000000); //sleep for 3 seconds
@@ -143,9 +146,23 @@ int main(int argc, char *argv[])
 	}
 
 	CM3DeviceDeInit();
-}  
+}
+static int guichange(int selectant) {
+    system("killall pqiv"); // close previous instances of PQIV if any
+    if (selectant == 1) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/welcomeui.jpg &"); // welcome screen
+        return 1;
+    } else if (selectant == 2) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/printingui.jpg &"); // printing screen
+        return 2;
+    } else if (selectant == 3) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/exitui.jpg &"); // goodbye screen
+        return 3;
+    }
+    return 0;
+}
 
-static void printTicket(void){
+static void printTicket(double paymentamount){
 
 	// Get the current time
     time_t rawtime;
@@ -167,12 +184,16 @@ static void printTicket(void){
     // Show "8" on the 7-segment LED
     CM3_outport(LEDPort, Bin2LED[8]);
 
-	//beep beep
+	 // Convert payment amount to string for display
+    char amountStr[16];
+    snprintf(amountStr, sizeof(amountStr), "%.2f", paymentamount);
+
+	//beep alert sound
 	lcd_writecmd(0xC0);
-	//sprintf(LCDStr,"beep beep");
-	LCDprint("beep beep");
-	 runDAC();
+	LCDprint(amountStr);
+	runDAC(); 
 	usleep(3000000);
+
 	openGantry();
 }
 static void displaycurrentime(void){
@@ -184,7 +205,6 @@ static void displaycurrentime(void){
 	time(&now);
 	tm_info = localtime(&now);
 	strftime(timestring,sizeof(timestring),"%H:%M:%S",tm_info);
-	//sprintf(LCDStr,"Car Detected");
 	LCDprint(timestring);
 	usleep(200000);
 }
@@ -197,23 +217,21 @@ static void openGantry(void){
 	//open gantry
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	//sprintf(LCDStr,"Gantry Opened");
+
 	LCDprint("Gantry Opened");
 	moveMotor(1);
 	usleep(5000000);
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	//sprintf(LCDStr,"Gantry Opened");
+
 	LCDprint("Gantry Closing");
 	moveMotor(0);
-	system("killall pqiv");
-	system("DISPLAY=:0.0 pqiv -f /tmp/printingui.jpg &");
+	guichange(3);
+
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	//sprintf(LCDStr,"Have A");
 	LCDprint("Have A");
 	lcd_writecmd(0xC0);
-	//sprintf(LCDStr,"Nice Day");
 	LCDprint("Nice Day");
 }
 
@@ -374,7 +392,7 @@ void runDAC(void) {
     unsigned char buffer[1];
     FILE *ptr;
 
-    // Open the audio file for reading
+    // Open the audio file for reading and quit on error
     ptr = fopen(AUDIOFILE, "rb");
     if (ptr == NULL) {
         perror(AUDIOFILE);
@@ -382,14 +400,8 @@ void runDAC(void) {
         return;
     }
 
-    // Initialize DAC
-    CM3DeviceInit();
-    CM3PortInit(5);  // Initialise DAC
-    printf("Connect Pin 1 and 2 of selection jumper Connector J3\n");
-
     // Track the start time
-    clock_t start_time = clock();
-    clock_t current_time;
+    clock_t start_time = clock(),current_time;
     double elapsed_time;
 
     // Read from the file and write to the DAC
