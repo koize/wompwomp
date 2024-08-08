@@ -67,6 +67,9 @@ static void lcddata(unsigned char cmd);
 static void moveMotor(int direction);
 static void runDAC();
 
+unsigned char i,ii;
+unsigned char key;
+
 /************* MAIN PROGRAM ******************/
 
 int main(int argc, char *argv[])
@@ -80,8 +83,7 @@ int main(int argc, char *argv[])
 
 	while(1)
 	{
-		unsigned char i,ii;
-		unsigned char key;
+		
 		static int car_status,gui_status,gui_initial_status=0;
 
 		time_t entryTime, exitTime;
@@ -109,17 +111,20 @@ int main(int argc, char *argv[])
 				LCDprint("Car Detected");
 				usleep(2000000);
 
-				guichange(2);
+				
 
 				if(car_status==0){ //if no car inside carpark, enter this into carlist
 				    openGantry();
 					car_status=1;
 					 time(&entryTime);
+					 gui_initial_status=0;
 				}else if(car_status==1){ //if car is inside carpark, print ticket
+				    guichange(2);
 					lcd_writecmd(0x01);  
 				    LCDprint("Press # for");
 				    lcd_writecmd(0xC0);
 				    LCDprint("Ticket");
+					car_status=0;
 
 					while (key != 'B'){
 					if (i != 0xFF)													// if key is pressed
@@ -156,7 +161,7 @@ static int guichange(int selectant) {
         system("DISPLAY=:0.0 pqiv -f /tmp/printingui.jpg &"); // printing screen
         return 2;
     } else if (selectant == 3) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/exitui.jpg &"); // goodbye screen
+        system("DISPLAY=:0.0 pqiv -f /tmp/thankingui.jpg &"); // goodbye screen
         return 3;
     }
     return 0;
@@ -224,6 +229,12 @@ static void openGantry(void){
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
 
+	i = ScanKey();
+
+	while (i != 0xFF){
+		i = ScanKey();
+	}
+
 	LCDprint("Gantry Closing");
 	moveMotor(0);
 	guichange(3);
@@ -237,23 +248,23 @@ static void openGantry(void){
 
 
 static void moveMotor(int direction) {
-	int i,j;
-	i=0;
+	int k,j;
+	k=0;
 	if (direction == 1) { //normal
 		for (j=NumSteps;j>0;j--)
 		{
-			CM3_outport(SMPort, Ptable[i]);	/* output to stepper motor */
+			CM3_outport(SMPort, Ptable[k]);	/* output to stepper motor */
 			usleep(10000);                  /* delay */
-			i++;
-			if (i>=PtableLen) i=0;
+			k++;
+			if (k>=PtableLen) k=0;
 		}
 	} else { //reverse
 		for (j=NumSteps;j>0;j--)
 		{
-			CM3_outport(SMPort, Ptable[i]);	/* output to stepper motor */
+			CM3_outport(SMPort, Ptable[k]);	/* output to stepper motor */
 			usleep(10000);                  /* delay */
-			i--;
-			if (i<0) i=PtableLen-1;
+			k--;
+			if (k<0) k=PtableLen-1;
 		}
 	}
 	
@@ -298,7 +309,7 @@ static void LCDprint(char *sptr)                        // function to print str
 {
 	while (*sptr != 0)
 	{
-		int i=1;
+		int k=1;
         lcddata(*sptr);
 		++sptr;
 	}
