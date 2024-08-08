@@ -67,8 +67,7 @@ static void lcddata(unsigned char cmd);
 static void moveMotor(int direction);
 static void runDAC();
 
-unsigned char i,ii;
-unsigned char key;
+
 
 /************* MAIN PROGRAM ******************/
 
@@ -83,6 +82,8 @@ int main(int argc, char *argv[])
 
 	while(1)
 	{
+		unsigned char i,ii;
+		unsigned char key;
 		
 		static int car_status,gui_status,gui_initial_status=0;
 
@@ -116,7 +117,7 @@ int main(int argc, char *argv[])
 				if(car_status==0){ //if no car inside carpark, enter this into carlist
 				    openGantry();
 					car_status=1;
-					 time(&entryTime);
+					 entryTime=time(NULL);
 					 gui_initial_status=0;
 				}else if(car_status==1){ //if car is inside carpark, print ticket
 				    guichange(2);
@@ -125,14 +126,14 @@ int main(int argc, char *argv[])
 				    lcd_writecmd(0xC0);
 				    LCDprint("Ticket");
 					car_status=0;
-
+					key = '5';
 					while (key != 'B'){
 					if (i != 0xFF)													// if key is pressed
-					{
+					{ 
 						key = ScanKey();											// store last key pressed
 					}	
 					if (key == 'B'){
-						time(&exitTime);
+						exitTime=time(NULL);
 						double paymentamount = (difftime(entryTime, exitTime))/60*0.02;
 						printTicket(paymentamount);
 						break;
@@ -146,7 +147,7 @@ int main(int argc, char *argv[])
             //what is this for?
 			//lcddata(i);                                 // output to LCD
 			CM3_outport(LEDPort, Bin2LED[ii]);			// output to LED
-			usleep(3000000); //sleep for 3 seconds
+			usleep(1000000); //sleep for 1 seconds
 		}
 	}
 
@@ -169,22 +170,8 @@ static int guichange(int selectant) {
 
 static void printTicket(double paymentamount){
 
-	// Get the current time
-    time_t rawtime;
-    struct tm * timeinfo;
-    char buffer[9]; // Buffer to hold the formatted time string "hh:mm:ss"
-
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-
-    // Format the time as "hh:mm:ss"
-    strftime(buffer, sizeof(buffer), "%H:%M:%S", timeinfo);
-
-    // Clear the LCD screen
-    lcd_writecmd(0x01);
-
     // Display the formatted time on the LCD
-	LCDprint(buffer);
+	displaycurrentime();
 
     // Show "8" on the 7-segment LED
     CM3_outport(LEDPort, Bin2LED[8]);
@@ -219,6 +206,7 @@ static void displaycurrentime(void){
 
 
 static void openGantry(void){
+	unsigned char i;
 	//open gantry
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
