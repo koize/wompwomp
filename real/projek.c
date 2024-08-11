@@ -8,6 +8,7 @@
 #include <time.h>
 #include "library.h"
 
+
 #define LEDPort 0x3A		/* LED port */
 #define LCDPort 0x3B			/* LCD port */
 #define SMPort 0x39 	    // stepper motor port
@@ -15,6 +16,12 @@
 
 #define	NumSteps	200
 #define	PtableLen	4
+#define AUDIOFILE1 "/tmp/ecs_slide1_checkcar.raw"
+#define AUDIOFILE2 "/tmp/ecs_slide2_open_gantry_entry.raw"
+#define AUDIOFILE3 "/tmp/ecs_slide3_request_ticket.raw"
+#define AUDIOFILE4 "/tmp/ecs_slide4_pay_parking.raw"
+#define AUDIOFILE5 "/tmp/ecs_slide5_exit_success.raw"
+
 
 unsigned char Ptable []={0x01, 0x02, 0x4, 0x08};
 
@@ -50,40 +57,54 @@ unsigned char ScanCode;			// hold scan code returned
 #define Col5Lo 0xFD            // column 5 scan
 #define Col4Lo 0xFE            // column 4 scan
 
+static void displaycurrentime();
+static void openGantry();
+static void printTicket();
+static int guichange(int selectant);
+
+
+
+
 static void initlcd();
 static void lcd_writecmd(char cmd);
 static void LCDprint(char *sptr);
 static void lcddata(unsigned char cmd);
-static void printTicket();
-static void openGantry();
 static void moveMotor(int direction);
+static void runDAC();
+
+
 
 /************* MAIN PROGRAM ******************/
 
 int main(int argc, char *argv[])
 {
 	CM3DeviceInit();
+	CM3PortInit(5);  // Initialise DAC
 	
 	initlcd();
 	sleep(1);
+	runDAC(1); 
+	usleep(3000000);
 
-	/*
-	lcd_writecmd(0x80);
-	LCDprint("LCD Lab");
-	lcd_writecmd(0xC0);
-	LCDprint("12345678");
-	test=104;
-	sprintf(LCDStr,"Subject:ET%d-OK",test);
-	LCDprint(LCDStr);
-	*/
+
 
 	while(1)
 	{
 		unsigned char i,ii;
 		unsigned char key;
-		//system("killall pqiv");												// close previous instances of PQIV if any
-		//system("DISPLAY=:0.0 pqiv -f /tmp/welcome.jpg &");       			// on main display, launch PQIV, fulscreen, image path in linux, continue program
+		
+		static int car_status,gui_status,gui_initial_status=0;
+
+		time_t entryTime, exitTime;
+
+		if(gui_initial_status==0){             //prevents constant spamming of gui change
+			gui_initial_status=guichange(1);
+		}
+
+		displaycurrentime();
+
 		i = ScanKey();
+		
 		if (i != 0xFF)									// if key is pressed
 		{
 			if (i > 0x39) {                             // if numerals pressed output numbers, if * or # pressed output A and B
@@ -93,118 +114,173 @@ int main(int argc, char *argv[])
 			}
 
 			if (ii == 1) { //press 1 to simulate car detected
-				//simulate car detected
+
 				lcd_writecmd(0x01);  //clear screen
 				lcd_writecmd(0x80);
-				//sprintf(LCDStr,"Car Detected");
 				LCDprint("Car Detected");
 				usleep(2000000);
-				lcd_writecmd(0x01);  //clear screen
-				//sprintf(LCDStr,"Press # for");
-				LCDprint("Press # for");
-				lcd_writecmd(0xC0);
-				//sprintf(LCDStr,"Ticket");
-				LCDprint("Ticket");
-				//i = 0xFF;
-				
-				
-								
 
-				while (key != 'B'){
+				
+
+				if(car_status==0){ //if no car inside carpark, enter this into carlist
+				    openGantry();
+					car_status=1;
+					entryTime=time(NULL);
+					gui_initial_status=0;
+					guichange(2);
+					runDAC(2); 
+					usleep(3000000);
+				}else if(car_status==1){ //if car is inside carpark, print ticket
+				    guichange(3);
+					runDAC(3); 
+					usleep(3000000);
+					lcd_writecmd(0x01);  
+				    LCDprint("Press # for");
+				    lcd_writecmd(0xC0);
+				    LCDprint("Ticket");
+					car_status=0;
+					key = '5';
+					while (key != 'B'){
 					if (i != 0xFF)													// if key is pressed
-					{
+					{ 
 						key = ScanKey();											// store last key pressed
 					}	
 					if (key == 'B'){
-						printTicket();
+						exitTime=time(NULL);
+						double paymentamount = (difftime(entryTime, exitTime))/60*0.02;
+						printTicket(paymentamount);
 						break;
 					}
 				}
-				
-				
-				
+				}
+
 
 			}
 
+            //what is this for?
 			//lcddata(i);                                 // output to LCD
 			CM3_outport(LEDPort, Bin2LED[ii]);			// output to LED
-			usleep(3000000); //sleep for 3 seconds
+			usleep(1000000); //sleep for 1 seconds
 		}
 	}
 
 	CM3DeviceDeInit();
-}  
+}
+static int guichange(int selectant) {
+    system("killall pqiv"); // close previous instances of PQIV if any
+    if (selectant == 1) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_check_car.jpg &"); // welcome screen
+        return 1;
+    } 
+	else if (selectant == 2) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide2_entry_recorded.jpg &"); // printing screen
+        return 2;
+    } 
+	else if (selectant == 3) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide3_get_ticket.jpg &"); // goodbye screen
+        return 3; 
+    }
+	else if (selectant == 4) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_pay_parking.jpg &"); // goodbye screen
+        return 4;
+    }
+	else if (selectant == 5) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_exit_success.jpg &"); // goodbye screen
+        return 5;
+    }
+    return 0;
+}
 
-static void printTicket(void){
-	// Get the current time
-    time_t rawtime;
-    struct tm * timeinfo;
-    char buffer[9]; // Buffer to hold the formatted time string "hh:mm:ss"
-
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-
-    // Format the time as "hh:mm:ss"
-    strftime(buffer, sizeof(buffer), "%H:%M:%S", timeinfo);
-
-    // Clear the LCD screen
-    lcd_writecmd(0x01);
+static void printTicket(double paymentamount){
 
     // Display the formatted time on the LCD
-	LCDprint(buffer);
+	displaycurrentime();
 
     // Show "8" on the 7-segment LED
     CM3_outport(LEDPort, Bin2LED[8]);
 
-	//beep beep
-	lcd_writecmd(0x01);  //clear screen
-	lcd_writecmd(0x80);
-	//sprintf(LCDStr,"beep beep");
-	LCDprint("beep beep");
+	 // Convert payment amount to string for display
+    char amountStr[16];
+    snprintf(amountStr, sizeof(amountStr), "%.2f", paymentamount);
+
+	//beep alert sound
+	lcd_writecmd(0xC0);
+	LCDprint(amountStr);
+	guichange(4);
+	runDAC(4); 
 	usleep(3000000);
 	openGantry();
+	guichange(5);
+	runDAC(5); 
+	usleep(3000000);
+
 }
+static void displaycurrentime(void){
+	lcd_writecmd(0x01);  //clear screen
+	lcd_writecmd(0x80);
+	time_t now;
+	struct tm*tm_info;
+	char timestring[16];
+	time(&now);
+	tm_info = localtime(&now);
+	strftime(timestring,sizeof(timestring),"%H:%M:%S",tm_info);
+	LCDprint(timestring);
+	usleep(200000);
+}
+
 
 
 
 
 static void openGantry(void){
+	unsigned char i;
 	//open gantry
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	//sprintf(LCDStr,"Gantry Opened");
+
 	LCDprint("Gantry Opened");
 	moveMotor(1);
 	usleep(5000000);
-	moveMotor(0);
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
-	//sprintf(LCDStr,"Have A");
+
+	i = ScanKey();
+
+	while (i != 0xFF){
+		i = ScanKey();
+	}
+
+	LCDprint("Gantry Closing");
+	moveMotor(0);
+	guichange(3);
+
+	lcd_writecmd(0x01);  //clear screen
+	lcd_writecmd(0x80);
 	LCDprint("Have A");
 	lcd_writecmd(0xC0);
-	//sprintf(LCDStr,"Nice Day");
 	LCDprint("Nice Day");
+	
 }
 
 
 static void moveMotor(int direction) {
-	int i,j;
-	i=0;
+	int k,j;
+	k=0;
 	if (direction == 1) { //normal
 		for (j=NumSteps;j>0;j--)
 		{
-			CM3_outport(SMPort, Ptable[i]);	/* output to stepper motor */
+			CM3_outport(SMPort, Ptable[k]);	/* output to stepper motor */
 			usleep(10000);                  /* delay */
-			i++;
-			if (i>=PtableLen) i=0;
+			k++;
+			if (k>=PtableLen) k=0;
 		}
 	} else { //reverse
 		for (j=NumSteps;j>0;j--)
 		{
-			CM3_outport(SMPort, Ptable[i]);	/* output to stepper motor */
+			CM3_outport(SMPort, Ptable[k]);	/* output to stepper motor */
 			usleep(10000);                  /* delay */
-			i--;
-			if (i<0) i=PtableLen-1;
+			k--;
+			if (k<0) k=PtableLen-1;
 		}
 	}
 	
@@ -249,7 +325,7 @@ static void LCDprint(char *sptr)                        // function to print str
 {
 	while (*sptr != 0)
 	{
-		int i=1;
+		int k=1;
         lcddata(*sptr);
 		++sptr;
 	}
@@ -338,4 +414,76 @@ unsigned char ProcKey()
 	}
 
 	return (0);
+}
+void runDAC(int i) {
+    unsigned char buffer[1];
+    FILE *ptr;
+	
+	switch(i){
+		case 1: 
+			ptr = fopen(AUDIOFILE, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 2:
+			ptr = fopen(AUDIOFILE2, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE2);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 3:
+			ptr = fopen(AUDIOFILE3, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE3);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 4:
+			ptr = fopen(AUDIOFILE4, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE4);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 5:
+			ptr = fopen(AUDIOFILE5, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE5);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+	}
+
+
+    // Open the audio file for reading and quit on error
+    
+
+    // Track the start time
+    clock_t start_time = clock(),current_time;
+    double elapsed_time;
+
+    // Read from the file and write to the DAC
+    while (fread(buffer, sizeof(buffer), 1, ptr) == 1) {
+        // Check elapsed time
+        current_time = clock();
+        elapsed_time = (double)(current_time - start_time) / CLOCKS_PER_SEC;
+        if (elapsed_time > 5.0) {  // 5 seconds limit
+            printf("DAC operation limited to 5 seconds.\n");
+            break;
+        }
+
+        CM3PortWrite(3, buffer[0]);
+        usleep(100);  // Adjust sleep time as needed
+    }
+
+    // Close the file
+    fclose(ptr);
 }
