@@ -16,7 +16,12 @@
 
 #define	NumSteps	200
 #define	PtableLen	4
-#define AUDIOFILE "/tmp/shootingstars.raw"
+#define AUDIOFILE1 "/tmp/ecs_slide1_checkcar.raw"
+#define AUDIOFILE2 "/tmp/ecs_slide2_open_gantry_entry.raw"
+#define AUDIOFILE3 "/tmp/ecs_slide3_request_ticket.raw"
+#define AUDIOFILE4 "/tmp/ecs_slide4_pay_parking.raw"
+#define AUDIOFILE5 "/tmp/ecs_slide5_exit_success.raw"
+
 
 unsigned char Ptable []={0x01, 0x02, 0x4, 0x08};
 
@@ -78,6 +83,9 @@ int main(int argc, char *argv[])
 	
 	initlcd();
 	sleep(1);
+	runDAC(1); 
+	usleep(3000000);
+
 
 
 	while(1)
@@ -117,10 +125,15 @@ int main(int argc, char *argv[])
 				if(car_status==0){ //if no car inside carpark, enter this into carlist
 				    openGantry();
 					car_status=1;
-					 entryTime=time(NULL);
-					 gui_initial_status=0;
+					entryTime=time(NULL);
+					gui_initial_status=0;
+					guichange(2);
+					runDAC(2); 
+					usleep(3000000);
 				}else if(car_status==1){ //if car is inside carpark, print ticket
-				    guichange(2);
+				    guichange(3);
+					runDAC(3); 
+					usleep(3000000);
 					lcd_writecmd(0x01);  
 				    LCDprint("Press # for");
 				    lcd_writecmd(0xC0);
@@ -156,14 +169,24 @@ int main(int argc, char *argv[])
 static int guichange(int selectant) {
     system("killall pqiv"); // close previous instances of PQIV if any
     if (selectant == 1) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/welcomeui.jpg &"); // welcome screen
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_check_car.jpg &"); // welcome screen
         return 1;
-    } else if (selectant == 2) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/printingui.jpg &"); // printing screen
+    } 
+	else if (selectant == 2) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide2_entry_recorded.jpg &"); // printing screen
         return 2;
-    } else if (selectant == 3) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/thankingui.jpg &"); // goodbye screen
-        return 3;
+    } 
+	else if (selectant == 3) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide3_get_ticket.jpg &"); // goodbye screen
+        return 3; 
+    }
+	else if (selectant == 4) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_pay_parking.jpg &"); // goodbye screen
+        return 4;
+    }
+	else if (selectant == 5) {
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_exit_success.jpg &"); // goodbye screen
+        return 5;
     }
     return 0;
 }
@@ -183,10 +206,14 @@ static void printTicket(double paymentamount){
 	//beep alert sound
 	lcd_writecmd(0xC0);
 	LCDprint(amountStr);
-	runDAC(); 
+	guichange(4);
+	runDAC(4); 
+	usleep(3000000);
+	openGantry();
+	guichange(5);
+	runDAC(5); 
 	usleep(3000000);
 
-	openGantry();
 }
 static void displaycurrentime(void){
 	lcd_writecmd(0x01);  //clear screen
@@ -232,6 +259,7 @@ static void openGantry(void){
 	LCDprint("Have A");
 	lcd_writecmd(0xC0);
 	LCDprint("Nice Day");
+	
 }
 
 
@@ -387,17 +415,56 @@ unsigned char ProcKey()
 
 	return (0);
 }
-void runDAC(void) {
+void runDAC(int i) {
     unsigned char buffer[1];
     FILE *ptr;
+	
+	switch(i){
+		case 1: 
+			ptr = fopen(AUDIOFILE, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 2:
+			ptr = fopen(AUDIOFILE2, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE2);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 3:
+			ptr = fopen(AUDIOFILE3, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE3);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 4:
+			ptr = fopen(AUDIOFILE4, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE4);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+		case 5:
+			ptr = fopen(AUDIOFILE5, "rb");
+			if (ptr == NULL) {
+				perror(AUDIOFILE5);
+				printf("File cannot be found\n");
+				return;
+			}
+			break;
+	}
+
 
     // Open the audio file for reading and quit on error
-    ptr = fopen(AUDIOFILE, "rb");
-    if (ptr == NULL) {
-        perror(AUDIOFILE);
-        printf("File cannot be found\n");
-        return;
-    }
+    
 
     // Track the start time
     clock_t start_time = clock(),current_time;
