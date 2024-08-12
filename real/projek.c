@@ -16,7 +16,9 @@
 
 #define	NumSteps	200
 #define	PtableLen	4
-#define AUDIOFILE1 "/tmp/ecs_slide1_checkcar.raw"
+//#define AUDIOFILE1 "/tmp/ecs_slide1_checkcar.raw"
+#define AUDIOFILE1 "/tmp/shootingstars.raw"
+
 #define AUDIOFILE2 "/tmp/ecs_slide2_open_gantry_entry.raw"
 #define AUDIOFILE3 "/tmp/ecs_slide3_request_ticket.raw"
 #define AUDIOFILE4 "/tmp/ecs_slide4_pay_parking.raw"
@@ -84,7 +86,6 @@ int main(int argc, char *argv[])
 	initlcd();
 	sleep(1);
 	runDAC(1); 
-	usleep(3000000);
 
 
 
@@ -123,17 +124,15 @@ int main(int argc, char *argv[])
 				
 
 				if(car_status==0){ //if no car inside carpark, enter this into carlist
+					guichange(2);
 				    openGantry();
 					car_status=1;
 					entryTime=time(NULL);
 					gui_initial_status=0;
-					guichange(2);
-					runDAC(2); 
-					usleep(3000000);
+					//runDAC(2); 
 				}else if(car_status==1){ //if car is inside carpark, print ticket
 				    guichange(3);
-					runDAC(3); 
-					usleep(3000000);
+					//runDAC(3); 
 					lcd_writecmd(0x01);  
 				    LCDprint("Press # for");
 				    lcd_writecmd(0xC0);
@@ -181,17 +180,19 @@ static int guichange(int selectant) {
         return 3; 
     }
 	else if (selectant == 4) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_pay_parking.jpg &"); // goodbye screen
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide4_pay_parking.jpg &"); // goodbye screen
         return 4;
     }
 	else if (selectant == 5) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_exit_success.jpg &"); // goodbye screen
+        system("DISPLAY=:0.0 pqiv -f /tmp/slide5_exit_success.jpg &"); // goodbye screen
         return 5;
     }
     return 0;
 }
 
 static void printTicket(double paymentamount){
+	guichange(4);
+
 
     // Display the formatted time on the LCD
 	displaycurrentime();
@@ -206,13 +207,10 @@ static void printTicket(double paymentamount){
 	//beep alert sound
 	lcd_writecmd(0xC0);
 	LCDprint(amountStr);
-	guichange(4);
-	runDAC(4); 
-	usleep(3000000);
-	openGantry();
+	usleep(5000000);
 	guichange(5);
-	runDAC(5); 
-	usleep(3000000);
+	//runDAC(4); 
+	openGantry();
 
 }
 static void displaycurrentime(void){
@@ -252,7 +250,6 @@ static void openGantry(void){
 
 	LCDprint("Gantry Closing");
 	moveMotor(0);
-	guichange(3);
 
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
@@ -421,9 +418,9 @@ void runDAC(int i) {
 	
 	switch(i){
 		case 1: 
-			ptr = fopen(AUDIOFILE, "rb");
+			ptr = fopen(AUDIOFILE1, "rb");
 			if (ptr == NULL) {
-				perror(AUDIOFILE);
+				perror(AUDIOFILE1);
 				printf("File cannot be found\n");
 				return;
 			}
