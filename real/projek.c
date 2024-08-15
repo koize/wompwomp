@@ -16,9 +16,7 @@
 
 #define	NumSteps	200
 #define	PtableLen	4
-//#define AUDIOFILE1 "/tmp/ecs_slide1_checkcar.raw"
-#define AUDIOFILE1 "/tmp/shootingstars.raw"
-
+#define AUDIOFILE1 "/tmp/ecs_slide1_check_car.raw"
 #define AUDIOFILE2 "/tmp/ecs_slide2_open_gantry_entry.raw"
 #define AUDIOFILE3 "/tmp/ecs_slide3_request_ticket.raw"
 #define AUDIOFILE4 "/tmp/ecs_slide4_pay_parking.raw"
@@ -72,7 +70,7 @@ static void lcd_writecmd(char cmd);
 static void LCDprint(char *sptr);
 static void lcddata(unsigned char cmd);
 static void moveMotor(int direction);
-static void runDAC();
+static void runDAC(int i);
 
 
 
@@ -85,7 +83,8 @@ int main(int argc, char *argv[])
 	
 	initlcd();
 	sleep(1);
-	runDAC(1); 
+//	runDAC(1); 
+	usleep(3000000);
 
 
 
@@ -124,15 +123,17 @@ int main(int argc, char *argv[])
 				
 
 				if(car_status==0){ //if no car inside carpark, enter this into carlist
-					guichange(2);
 				    openGantry();
 					car_status=1;
 					entryTime=time(NULL);
 					gui_initial_status=0;
-					//runDAC(2); 
+					guichange(2);
+//					runDAC(2); 
+					usleep(3000000);
 				}else if(car_status==1){ //if car is inside carpark, print ticket
 				    guichange(3);
-					//runDAC(3); 
+//					runDAC(3); 
+					usleep(3000000);
 					lcd_writecmd(0x01);  
 				    LCDprint("Press # for");
 				    lcd_writecmd(0xC0);
@@ -146,8 +147,9 @@ int main(int argc, char *argv[])
 					}	
 					if (key == 'B'){
 						exitTime=time(NULL);
-						double paymentamount = (difftime(entryTime, exitTime))/60*0.02;
+						double paymentamount = (difftime(exitTime, entryTime))/60*0.2;
 						printTicket(paymentamount);
+						gui_initial_status = 0;
 						break;
 					}
 				}
@@ -166,51 +168,66 @@ int main(int argc, char *argv[])
 	CM3DeviceDeInit();
 }
 static int guichange(int selectant) {
-    system("killall pqiv"); // close previous instances of PQIV if any
-    if (selectant == 1) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/slide1_check_car.jpg &"); // welcome screen
-        return 1;
-    } 
-	else if (selectant == 2) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/slide2_entry_recorded.jpg &"); // printing screen
-        return 2;
-    } 
-	else if (selectant == 3) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/slide3_get_ticket.jpg &"); // goodbye screen
-        return 3; 
+    // Close previous instances of PQIV if any
+    system("killall pqiv");
+
+    // Variable to hold the return value
+    int result = 0;
+
+    // Switch case based on the value of selectant
+    switch (selectant) {
+        case 1:
+            system("DISPLAY=:0.0 pqiv -f /tmp/slide1_check_car.jpg &"); // welcome screen
+            result = 1;
+            break;
+        case 2:
+            system("DISPLAY=:0.0 pqiv -f /tmp/slide2_entry_recorded.jpg &"); // entry recorded screen
+            result = 2;
+            break;
+        case 3:
+            system("DISPLAY=:0.0 pqiv -f /tmp/slide3_get_ticket.jpg &"); // exit ticket screen
+            result = 3;
+            break;
+        case 4:
+            system("DISPLAY=:0.0 pqiv -f /tmp/slide4_pay_parking.jpg &"); // paying screen
+            result = 4;
+            break;
+        case 5:
+            system("DISPLAY=:0.0 pqiv -f /tmp/slide5_exit_success.jpg &"); // goodbye screen
+            result = 5;
+            break;
+        default:
+            result = 0;
+            break;
     }
-	else if (selectant == 4) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/slide4_pay_parking.jpg &"); // goodbye screen
-        return 4;
-    }
-	else if (selectant == 5) {
-        system("DISPLAY=:0.0 pqiv -f /tmp/slide5_exit_success.jpg &"); // goodbye screen
-        return 5;
-    }
-    return 0;
+
+    return result;
 }
 
 static void printTicket(double paymentamount){
-	guichange(4);
-
 
     // Display the formatted time on the LCD
+	char display[10];
 	displaycurrentime();
+	sprintf (display, "$%.2f", paymentamount);
 
     // Show "8" on the 7-segment LED
     CM3_outport(LEDPort, Bin2LED[8]);
 
 	 // Convert payment amount to string for display
     char amountStr[16];
-    snprintf(amountStr, sizeof(amountStr), "%.2f", paymentamount);
+    snprintf(amountStr, sizeof(amountStr), display);
 
 	//beep alert sound
 	lcd_writecmd(0xC0);
 	LCDprint(amountStr);
-	usleep(5000000);
-	guichange(5);
-	//runDAC(4); 
+	guichange(4);
+//	runDAC(4); 
+	usleep(3000000);
 	openGantry();
+	guichange(5);
+	runDAC(5); 
+	usleep(3000000);
 
 }
 static void displaycurrentime(void){
@@ -250,6 +267,7 @@ static void openGantry(void){
 
 	LCDprint("Gantry Closing");
 	moveMotor(0);
+	guichange(3);
 
 	lcd_writecmd(0x01);  //clear screen
 	lcd_writecmd(0x80);
@@ -472,7 +490,7 @@ void runDAC(int i) {
         // Check elapsed time
         current_time = clock();
         elapsed_time = (double)(current_time - start_time) / CLOCKS_PER_SEC;
-        if (elapsed_time > 5.0) {  // 5 seconds limit
+        if (elapsed_time > 1.0) {  // 5 seconds limit
             printf("DAC operation limited to 5 seconds.\n");
             break;
         }
